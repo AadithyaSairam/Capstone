@@ -1,10 +1,9 @@
 import serial
 import time
 
-# === SETUP SERIAL CONNECTION WITH BETTER ERROR HANDLING ===
 try:
     print("Attempting to connect to COM4...")
-    ser = serial.Serial('COM4', 9600, timeout=1)
+    ser = serial.Serial('COM4', 9600, timeout=1) #SET CORRECT COM PORT
     time.sleep(2)  # Wait for Arduino to reset
     print("✓ Arduino connected successfully!")
     
