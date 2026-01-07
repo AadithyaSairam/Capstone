@@ -3,17 +3,44 @@ import numpy as np
 import matplotlib.pyplot as plt
 import serial
 import time
+from serial.tools import list_ports
+
+
+def find_arduino_port(baudrate=9600, timeout=1):
+    """Automatically find Arduino COM port"""
+    ports = list(list_ports.comports())
+
+    if not ports:
+        print("No serial ports found")
+        return None
+
+    print("Available ports:")
+    for port in ports:
+        print(f"  {port.device} - {port.description}")
+
+    # First: try ports that look like Arduino
+    for port in ports:
+        desc = port.description.lower()
+        print(desc)
+        print(any(x in desc for x in ["arduino", "ch340", "usb serial", "cp210", "ftdi"]))
+        if any(x in desc for x in ["arduino", "ch340", "usb serial", "cp210", "ftdi"]):
+            try:
+                ser = serial.Serial(port.device, baudrate, timeout=timeout)
+                time.sleep(2)
+                print(f"Connected to Arduino on {port.device}")
+                return ser
+            except:
+                pass
+
+    print("No usable Arduino found")
+    return None
 
 
 # === SETUP SERIAL CONNECTION ===
-try:
-    ser = serial.Serial('COM4', 9600, timeout=1)
-    time.sleep(2)
-    print("Arduino connected!")
-except:
-    print("Warning: Arduino not found, using simulated data")
-    ser = None
+ser = find_arduino_port()
 
+if ser is None:
+    print("Warning: Arduino not found, using simulated data")
 
 # Load your 3D leg model
 mesh = pv.read('leg.stl')
