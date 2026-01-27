@@ -1,9 +1,8 @@
 """
-ESP32 Bluetooth Data Receiver
-Automatically connects and receives sensor data
+ESP32 BLE Data Receiver
 """
+import asyncio
 from esp32_bluetooth import ESP32Bluetooth
-import time
 
 def process_data(raw_data):
     """Parse and process CSV data"""
@@ -16,9 +15,6 @@ def process_data(raw_data):
             
             print(f"Timestamp: {timestamp}ms | Sensor1: {sensor1:.2f} | Sensor2: {sensor2:.2f}")
             
-            # Add your custom processing here
-            # Example: Save to file, trigger alerts, etc.
-            
             return {
                 'timestamp': timestamp,
                 'sensor1': sensor1,
@@ -28,47 +24,39 @@ def process_data(raw_data):
         print(f"Parse error: {e}")
         return None
 
-def main():
+def notification_handler(sender, data):
+    """Callback for BLE notifications"""
+    raw_data = data.decode('utf-8').strip()
+    process_data(raw_data)
+
+async def main():
     print("="*60)
-    print("ESP32 Bluetooth Data Receiver")
+    print("ESP32 BLE Data Receiver")
     print("="*60 + "\n")
     
-    # Create Bluetooth connection object
     esp32 = ESP32Bluetooth(device_name="ESP32_Sensor")
     
-    # Auto-discover and connect
-    if not esp32.connect():
+    # Connect
+    if not await esp32.connect():
         print("\nFailed to connect. Exiting...")
+        return
+    
+    # Start receiving notifications
+    if not await esp32.start_notifications(notification_handler):
+        print("\nFailed to start notifications. Exiting...")
+        await esp32.disconnect()
         return
     
     print("Receiving data (Press Ctrl+C to stop)...\n")
     
-    data_buffer = ""
-    
     try:
+        # Keep running
         while True:
-            # Receive data
-            chunk = esp32.receive_data()
-            
-            if chunk:
-                data_buffer += chunk
-                
-                # Process complete lines
-                while '\n' in data_buffer:
-                    line, data_buffer = data_buffer.split('\n', 1)
-                    line = line.strip()
-                    
-                    if line:
-                        process_data(line)
-            else:
-                time.sleep(0.1)  # Brief pause if no data
-                
+            await asyncio.sleep(1)
     except KeyboardInterrupt:
-        print("\n\nStopping data reception...")
-    except Exception as e:
-        print(f"\nError: {e}")
+        print("\n\nStopping...")
     finally:
-        esp32.disconnect()
+        await esp32.disconnect()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

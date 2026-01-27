@@ -1,75 +1,65 @@
 """
-ESP32 Bluetooth Auto-Connection Module
-Automatically discovers and connects to ESP32
+ESP32 BLE Auto-Connection Module for ESP32 Nano
 """
-import bluetooth
-import time
+import asyncio
+from bleak import BleakScanner, BleakClient
 
 class ESP32Bluetooth:
     def __init__(self, device_name="ESP32_Sensor"):
         self.device_name = device_name
-        self.target_address = None
-        self.socket = None
+        self.device_address = None
+        self.client = None
+        self.characteristic_uuid = "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+        self.data_callback = None
         
-    def discover_device(self):
-        """Scan for ESP32 Bluetooth device"""
+    async def discover_device(self):
+        """Scan for ESP32 BLE device"""
         print(f"Scanning for '{self.device_name}'...")
         
-        try:
-            nearby_devices = bluetooth.discover_devices(duration=8, lookup_names=True, flush_cache=True)
-            
-            for addr, name in nearby_devices:
-                print(f"Found: {name} [{addr}]")
-                if name == self.device_name:
-                    self.target_address = addr
-                    print(f"\n✓ Found target device: {name} at {addr}")
-                    return True
-            
-            print(f"\n✗ Device '{self.device_name}' not found")
-            return False
-            
-        except Exception as e:
-            print(f"Discovery error: {e}")
-            return False
+        devices = await BleakScanner.discover(timeout=10.0)
+        
+        for device in devices:
+            print(f"Found: {device.name} [{device.address}]")
+            if device.name == self.device_name:
+                self.device_address = device.address
+                print(f"\n✓ Found target device at {device.address}")
+                return True
+        
+        print(f"\n✗ Device '{self.device_name}' not found")
+        return False
     
-    def connect(self):
-        """Automatically discover and connect to ESP32"""
-        if not self.target_address:
-            if not self.discover_device():
-                print("Please make sure:")
-                print("1. ESP32 is powered on")
-                print("2. Bluetooth is enabled on your PC")
-                print("3. Device name matches in both ESP32 and Python code")
+    async def connect(self):
+        """Connect to ESP32 BLE device"""
+        if not self.device_address:
+            if not await self.discover_device():
                 return False
         
-        print(f"\nConnecting to {self.target_address}...")
+        print(f"\nConnecting to {self.device_address}...")
         
         try:
-            self.socket = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
-            self.socket.connect((self.target_address, 1))  # Port 1 for RFCOMM
+            self.client = BleakClient(self.device_address)
+            await self.client.connect()
             print("✓ Connected successfully!\n")
             return True
-            
         except Exception as e:
             print(f"Connection failed: {e}")
-            self.socket = None
             return False
     
-    def receive_data(self):
-        """Receive data from ESP32"""
-        if not self.socket:
+    async def start_notifications(self, callback):
+        """Start receiving notifications from ESP32"""
+        if not self.client or not self.client.is_connected:
             print("Not connected!")
-            return None
+            return False
         
         try:
-            data = self.socket.recv(1024).decode('utf-8').strip()
-            return data
+            await self.client.start_notify(self.characteristic_uuid, callback)
+            return True
         except Exception as e:
-            print(f"Receive error: {e}")
-            return None
+            print(f"Failed to start notifications: {e}")
+            return False
     
-    def disconnect(self):
-        """Close Bluetooth connection"""
-        if self.socket:
-            self.socket.close()
+    async def disconnect(self):
+        """Disconnect from ESP32"""
+        if self.client and self.client.is_connected:
+            await self.client.disconnect()
             print("Disconnected from ESP32")
