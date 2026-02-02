@@ -1,9 +1,10 @@
 """
-ESP32 BLE Auto-Connection Module with data callback
+ESP32 BLE Auto-Connection Module with data callback and write capability
 """
 import asyncio
 from bleak import BleakScanner, BleakClient
 import threading
+
 
 class ESP32Bluetooth:
     def __init__(self, device_name="ESP32_Sensor"):
@@ -14,6 +15,7 @@ class ESP32Bluetooth:
         self.data_callback = None
         self.latest_data = None
         self.connected = False
+        self.loop = None
         
     async def discover_device(self):
         """Scan for ESP32 BLE device"""
@@ -73,8 +75,23 @@ class ESP32Bluetooth:
             print(f"Failed to start notifications: {e}")
             return False
     
+    async def write_command(self, command):
+        """Write a command to ESP32"""
+        if not self.client or not self.client.is_connected:
+            print("Cannot write: Not connected!")
+            return False
+        
+        try:
+            await self.client.write_gatt_char(self.characteristic_uuid, command.encode())
+            return True
+        except Exception as e:
+            print(f"Write failed: {e}")
+            return False
+    
     async def run_loop(self, callback=None):
         """Connect and run notification loop"""
+        self.loop = asyncio.get_running_loop()
+        
         if not await self.connect():
             return
         
@@ -103,7 +120,32 @@ class ESP32Bluetooth:
         return self.latest_data
 
 
+# Global instance for thread-safe command sending
+_esp32_instance = None
+
 def run_bluetooth_thread(device_name, data_callback):
     """Helper function to run BLE in a separate thread"""
-    esp32 = ESP32Bluetooth(device_name)
-    asyncio.run(esp32.run_loop(data_callback))
+    global _esp32_instance
+    _esp32_instance = ESP32Bluetooth(device_name)
+    asyncio.run(_esp32_instance.run_loop(data_callback))
+
+
+def send_command_sync(command):
+    """Send command to ESP32 from main thread (thread-safe)"""
+    global _esp32_instance
+    
+    if not _esp32_instance or not _esp32_instance.connected:
+        return False
+    
+    # Create new event loop for this thread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        result = loop.run_until_complete(_esp32_instance.write_command(command))
+        return result
+    except Exception as e:
+        print(f"Command send error: {e}")
+        return False
+    finally:
+        loop.close()

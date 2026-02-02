@@ -66,12 +66,14 @@ void setup() {
 void loop() {
   if (deviceConnected) {
     // Generate test data
-    float sensor1 = random(0, 100) / 10.0;
-    float sensor2 = random(200, 300) / 10.0;
+    float sensor1 = random(0, 100);
+    float sensor2 = random(0, 100);
+    float sensor3 = random(0, 100);
+    float sensor4 = random(0, 100);
     unsigned long timestamp = millis();
     
     // Create CSV string
-    String data = String(timestamp) + "," + String(sensor1, 2) + "," + String(sensor2, 2);
+    String data = String(timestamp) + "," + String(sensor1, 2) + "," + String(sensor2, 2) + "," + String(sensor3, 2) + "," + String(sensor4, 2);
     
     // Send via BLE
     pCharacteristic->setValue(data.c_str());
