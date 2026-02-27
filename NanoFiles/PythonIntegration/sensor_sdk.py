@@ -4,8 +4,13 @@ import threading
 import time
 from collections import deque
 from esp32_bluetooth import run_bluetooth_thread, send_command_sync
+from utils import resource_path, writable_path
 
-CONFIG_FILE = "ideal_pressures.json"
+# Writable path for saving
+CONFIG_FILE = writable_path("ideal_pressures.json")
+# Bundled default to fall back on if no saved file exists yet
+CONFIG_FILE_DEFAULT = resource_path("ideal_pressures.json")
+
 
 class SocketSensor:
 
@@ -125,15 +130,26 @@ class SocketSensor:
 
     def load_baseline(self):
         try:
+            # Try writable path first (user's saved baseline)
             if os.path.exists(CONFIG_FILE):
                 with open(CONFIG_FILE, 'r') as f:
                     data = json.load(f)
                     self._baseline = data.get('ideal_pressures', [0.0] * self.num_sensors)
-                print(f"✓ Loaded baseline: {self._baseline}")
+                print(f"✓ Loaded saved baseline: {self._baseline}")
+
+            # Fall back to bundled default if no saved file yet
+            elif os.path.exists(CONFIG_FILE_DEFAULT):
+                with open(CONFIG_FILE_DEFAULT, 'r') as f:
+                    data = json.load(f)
+                    self._baseline = data.get('ideal_pressures', [0.0] * self.num_sensors)
+                print(f"✓ Loaded default baseline: {self._baseline}")
+
             else:
-                print("No saved baseline found, using defaults")
+                print("No baseline found, using zeros")
+
         except Exception as e:
             print(f"Error loading baseline: {e}")
+
 
     def get_baseline(self):
         return self._baseline.copy()
