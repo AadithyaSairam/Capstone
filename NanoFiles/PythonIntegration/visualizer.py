@@ -1925,11 +1925,6 @@ print(f"  X: {cell_centers[:,0].min():.1f} → {cell_centers[:,0].max():.1f}")
 print(f"  Y: {cell_centers[:,1].min():.1f} → {cell_centers[:,1].max():.1f}")
 print(f"  Z: {cell_centers[:,2].min():.1f} → {cell_centers[:,2].max():.1f}")
 
-# Check if your picked points are even in the right coordinate space
-print(f"\nYour BOA 1 zone X range: 49.3 → 97.8")
-print(f"Your BOA 1 zone Y range: -104 → 12")
-print(f"Your BOA 1 zone Z range: 199 → 222")
-
 # Count how many cells fall within those bounds
 mask = (
     (cell_centers[:,0] >= 49.0) & (cell_centers[:,0] <= 98.0) &

@@ -33,7 +33,7 @@ class SocketSensor:
 
         self.load_baseline()
 
-    # ── Connection ────────────────────────────────────────────
+    # == Connection ============================================
     def connect(self):
         t = threading.Thread(
             target=run_bluetooth_thread,
@@ -51,7 +51,7 @@ class SocketSensor:
     def using_real_data(self):
         return self._using_real_data
 
-    # ── Sampling ──────────────────────────────────────────────
+    # == Sampling ==============================================
     def _collect_samples(self, target_count, progress_callback=None):
         """
         Block until target_count fresh samples are collected,
@@ -81,7 +81,7 @@ class SocketSensor:
         print(f"✓ Averaged {target_count} samples: {[f'{v:.1f}' for v in averaged]}")
         return averaged
 
-    # ── Live Data ─────────────────────────────────────────────
+    # == Live Data =============================================
     def get_live(self):
         with self._lock:
             return self._latest.copy()
@@ -107,7 +107,7 @@ class SocketSensor:
             return self._captured.copy()
         return self.get_live()
 
-    # ── Baseline ──────────────────────────────────────────────
+    # == Baseline ==============================================
     def set_baseline(self, values=None, progress_callback=None):
         """
         Collect and average samples then save as baseline.
@@ -154,7 +154,7 @@ class SocketSensor:
     def get_baseline(self):
         return self._baseline.copy()
 
-    # ── Commands ──────────────────────────────────────────────
+    # == Commands ==============================================
     def tare(self):
         try:
             success = send_command_sync("TARE")
@@ -164,7 +164,7 @@ class SocketSensor:
             print(f"✗ Tare failed: {e}")
             return False
 
-    # ── Analysis ──────────────────────────────────────────────
+    # == Analysis ==============================================
     def get_deviation(self, sensor_index):
         return self._captured[sensor_index] - self._baseline[sensor_index]
 
@@ -177,14 +177,14 @@ class SocketSensor:
         else:
             return "✓ OK",      (0.2, 1.0, 0.2)
 
-    # ── Manual Override (Simulation Panel) ────────────────────
+    # == Manual Override (Simulation Panel) ====================
     def set_manual(self, index, value):
         if not self._using_real_data:
             with self._lock:
                 self._latest[index] = value
                 self._sample_buffer[index].append(value)
 
-    # ── Internal ──────────────────────────────────────────────
+    # == Internal ==============================================
     def _on_data(self, raw_data):
         values = self._parse(raw_data)
         if values:
