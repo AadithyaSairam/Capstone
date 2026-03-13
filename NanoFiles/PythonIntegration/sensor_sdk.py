@@ -2,30 +2,31 @@ import json
 import os
 import threading
 import time
+import numpy as np
 from collections import deque
+from scipy.signal import butter, filtfilt
 from esp32_bluetooth import run_bluetooth_thread, send_command_sync
 from utils import resource_path, writable_path
 
-# Writable path for saving
-CONFIG_FILE = writable_path("ideal_pressures.json")
-# Bundled default to fall back on if no saved file exists yet
+CONFIG_FILE         = writable_path("ideal_pressures.json")
 CONFIG_FILE_DEFAULT = resource_path("ideal_pressures.json")
-
 
 class SocketSensor:
 
-    def __init__(self, device_name="ESP32_LoadCells", num_sensors=4, threshold=20, sample_count=75):
-        self.device_name = device_name
-        self.num_sensors = num_sensors
-        self.threshold = threshold
-        self.sample_count = sample_count  # Number of samples to average
+    def __init__(self, device_name="ESP32_LoadCells", num_sensors=4, threshold=5, sample_count=25):
+        self.device_name  = device_name
+        self.num_sensors  = num_sensors
+        self.threshold    = threshold
+        self.sample_count = sample_count  # Reduced from 100 — Arduino pre-cleans now
 
-        self._lock = threading.Lock()
-        self._latest   = [0.0] * num_sensors
-        self._captured = [0.0] * num_sensors
-        self._baseline = [0.0] * num_sensors
-        self._has_capture = False
-        self._connected = False
+        self._lock            = threading.Lock()
+        self._latest          = [0.0] * num_sensors
+        self._ema             = [0.0] * num_sensors   # EMA state for get_live()
+        self._ema_alpha       = 0.2                   # 0.1=sluggish, 0.3=responsive
+        self._captured        = [0.0] * num_sensors
+        self._baseline        = [0.0] * num_sensors
+        self._has_capture     = False
+        self._connected       = False
         self._using_real_data = False
 
         # Rolling buffer — stores last N readings per sensor
@@ -54,11 +55,9 @@ class SocketSensor:
     # == Sampling ==============================================
     def _collect_samples(self, target_count, progress_callback=None):
         """
-        Block until target_count fresh samples are collected,
-        then return the averaged values.
-        progress_callback(current, total) is optional for UI progress updates.
+        Block until target_count fresh samples are collected.
+        Applies Butterworth low-pass filter then returns mean of filtered signal.
         """
-        # Clear the buffer so we only average fresh readings
         with self._lock:
             for buf in self._sample_buffer:
                 buf.clear()
@@ -69,25 +68,36 @@ class SocketSensor:
                 collected = min(len(buf) for buf in self._sample_buffer)
             if progress_callback:
                 progress_callback(collected, target_count)
-            time.sleep(0.05)  # Check every 50ms
+            time.sleep(0.05)
 
-        # Average across all collected samples
         with self._lock:
-            averaged = [
-                sum(self._sample_buffer[i]) / len(self._sample_buffer[i])
-                for i in range(self.num_sensors)
-            ]
+            filtered = []
+            for i in range(self.num_sensors):
+                samples = np.array(list(self._sample_buffer[i]), dtype=float)
+                smoothed = self._butter_lowpass(samples)
+                filtered.append(float(np.mean(smoothed)))
 
-        print(f"✓ Averaged {target_count} samples: {[f'{v:.1f}' for v in averaged]}")
-        return averaged
+        print(f"✓ Filtered {target_count} samples: {[f'{v:.1f}' for v in filtered]}")
+        return filtered
+
+    @staticmethod
+    def _butter_lowpass(data, cutoff_hz=1.0, fs_hz=10.0, order=4):
+        """Zero-phase Butterworth low-pass filter. Removes noise above 1Hz."""
+        if len(data) < 9:  # filtfilt needs at least padlen samples
+            return data
+        nyq = fs_hz / 2.0
+        normal_cutoff = cutoff_hz / nyq
+        b, a = butter(order, normal_cutoff, btype='low', analog=False)
+        return filtfilt(b, a, data)
 
     # == Live Data =============================================
     def get_live(self):
+        """Returns EMA-smoothed live values for UI display."""
         with self._lock:
-            return self._latest.copy()
+            return self._ema.copy()
 
     def capture(self, progress_callback=None):
-        """Collect and average samples for a READ/TEST snapshot"""
+        """Collect and filter samples for a READ/TEST snapshot."""
         print(f"Capturing {self.sample_count} samples...")
         averaged = self._collect_samples(self.sample_count, progress_callback)
         with self._lock:
@@ -109,10 +119,6 @@ class SocketSensor:
 
     # == Baseline ==============================================
     def set_baseline(self, values=None, progress_callback=None):
-        """
-        Collect and average samples then save as baseline.
-        If values are explicitly passed, skip sampling and use those directly.
-        """
         if values is None:
             print(f"Collecting {self.sample_count} samples for baseline...")
             values = self._collect_samples(self.sample_count, progress_callback)
@@ -130,26 +136,20 @@ class SocketSensor:
 
     def load_baseline(self):
         try:
-            # Try writable path first (user's saved baseline)
             if os.path.exists(CONFIG_FILE):
                 with open(CONFIG_FILE, 'r') as f:
                     data = json.load(f)
-                    self._baseline = data.get('ideal_pressures', [0.0] * self.num_sensors)
+                self._baseline = data.get('ideal_pressures', [0.0] * self.num_sensors)
                 print(f"✓ Loaded saved baseline: {self._baseline}")
-
-            # Fall back to bundled default if no saved file yet
             elif os.path.exists(CONFIG_FILE_DEFAULT):
                 with open(CONFIG_FILE_DEFAULT, 'r') as f:
                     data = json.load(f)
-                    self._baseline = data.get('ideal_pressures', [0.0] * self.num_sensors)
+                self._baseline = data.get('ideal_pressures', [0.0] * self.num_sensors)
                 print(f"✓ Loaded default baseline: {self._baseline}")
-
             else:
                 print("No baseline found, using zeros")
-
         except Exception as e:
             print(f"Error loading baseline: {e}")
-
 
     def get_baseline(self):
         return self._baseline.copy()
@@ -171,17 +171,18 @@ class SocketSensor:
     def get_recommendation(self, sensor_index):
         dev = self.get_deviation(sensor_index)
         if dev > self.threshold:
-            return "↻ LOOSEN",  (1.0, 0.2, 0.2)
+            return "↻ LOOSEN", (1.0, 0.2, 0.2)
         elif dev < -self.threshold:
             return "↺ TIGHTEN", (0.2, 0.2, 1.0)
         else:
-            return "✓ OK",      (0.2, 1.0, 0.2)
+            return "✓ OK", (0.2, 1.0, 0.2)
 
     # == Manual Override (Simulation Panel) ====================
     def set_manual(self, index, value):
         if not self._using_real_data:
             with self._lock:
                 self._latest[index] = value
+                self._ema[index] = value  # keep EMA in sync during simulation
                 self._sample_buffer[index].append(value)
 
     # == Internal ==============================================
@@ -189,12 +190,20 @@ class SocketSensor:
         values = self._parse(raw_data)
         if values:
             with self._lock:
-                self._latest = values
-                self._connected = True
+                self._latest      = values
+                self._connected   = True
                 self._using_real_data = True
-                # Push each sensor value into its rolling buffer
                 for i, v in enumerate(values):
+                    # Layer 1: Z-score spike rejection before adding to buffer
+                    if len(self._sample_buffer[i]) > 10:
+                        buf  = list(self._sample_buffer[i])
+                        mean = sum(buf) / len(buf)
+                        std  = (sum((x - mean) ** 2 for x in buf) / len(buf)) ** 0.5
+                        if std > 0 and abs(v - mean) > 3 * std:
+                            continue  # discard spike
                     self._sample_buffer[i].append(v)
+                    # Layer 2: EMA update for live display
+                    self._ema[i] = self._ema_alpha * v + (1 - self._ema_alpha) * self._ema[i]
 
     @staticmethod
     def _parse(raw_data):
@@ -208,20 +217,14 @@ class SocketSensor:
         except Exception as e:
             print(f"Parse error: {e} | Raw: {raw_data}")
         return None
-    
+
     def start_manual_stream(self, interval=0.1):
-        """
-        Continuously push current manual values into the buffer.
-        Called when running in simulation mode (no BLE).
-        """
         def pump():
             while not self._using_real_data:
                 with self._lock:
                     for i in range(self.num_sensors):
                         self._sample_buffer[i].append(self._latest[i])
                 time.sleep(interval)
-
         t = threading.Thread(target=pump, daemon=True)
         t.start()
         return t
-
