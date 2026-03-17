@@ -10,7 +10,7 @@ from sensor_sdk import SocketSensor
 from utils import resource_path
 
 # === CONFIGURATION ===
-sensor = SocketSensor(device_name="ESP32_LoadCells", threshold=3, sample_count=20)
+sensor = SocketSensor(device_name="ESP32_LoadCells", threshold=4, sample_count=20)
 
 
 # === BOA REGION DEFINITIONS ===
@@ -1040,7 +1040,7 @@ boa_regions = {
     },
 
 3: {
-    'name': 'BOA 4 (posterior)',
+    'name': 'BOA 4 (Bottom)',
     'position': [100.22, 29.86, 84.53],
     'zones': [
     # Zone 1
@@ -1763,7 +1763,7 @@ def update_mesh_colors(pressure_values):
         if np.any(mask):
             deviation = pressure_values[i] - baseline[i]
 
-            normalized = (-deviation + 25) / 50
+            normalized = (-deviation + 50) / 100
             normalized = np.clip(normalized, 0, 1)
 
             colormap = plt.get_cmap('jet')
