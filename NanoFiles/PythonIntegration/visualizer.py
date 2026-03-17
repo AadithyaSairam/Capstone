@@ -602,7 +602,7 @@ boa_regions = {
     },
 
 1: {
-    'name': 'BOA 1 (Front)',
+    'name': 'BOA 2 (Front)',
     'position': [25.84, 31.23, 207.45],
     'zones': [
         # Zone 1
@@ -1040,7 +1040,7 @@ boa_regions = {
     },
 
 3: {
-    'name': 'BOA 2 (Bottom)',
+    'name': 'BOA 4 (posterior)',
     'position': [100.22, 29.86, 84.53],
     'zones': [
     # Zone 1
