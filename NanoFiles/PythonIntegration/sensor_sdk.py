@@ -113,9 +113,15 @@ class SocketSensor:
         return self._has_capture
 
     def get_display(self):
+        """Always returns live EMA for 3D heatmap (ignores captures)."""
+        return self.get_live()
+    
+    def get_analysis(self):
+        """Returns captured values + recommendations for UI panels."""
         if self._has_capture:
             return self._captured.copy()
-        return self.get_live()
+        return self.get_live() 
+
 
     # == Baseline ==============================================
     def set_baseline(self, values=None, progress_callback=None):
