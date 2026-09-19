@@ -1,9 +1,9 @@
-# Adjustable paediatric prosthetic socket — pressure sensing and visualisation
+# Adjustable paediatric prosthetic socket: pressure sensing and visualisation
 
 A children's prosthetic socket has a hard problem that an adult's does not:
 the limb it fits is still growing, and a socket that fit last month can be
 causing a pressure ulcer this month. This is the instrumentation side of an
-adjustable socket — load cells inside the socket, streamed over Bluetooth LE,
+adjustable socket, load cells inside the socket, streamed over Bluetooth LE,
 mapped onto a 3D model of the residual limb so that a clinician can see where
 the pressure actually is rather than asking a child to describe it.
 
@@ -34,7 +34,7 @@ leg.STL                              the limb mesh
 ideal_pressures.json                 target pressure profile per region
 ```
 
-`sensor_sdk.py` is the piece to read first — it is the boundary between "bytes
+`sensor_sdk.py` is the piece to read first, it is the boundary between "bytes
 arriving over BLE" and "a pressure value you can trust", and everything above
 it depends on the buffering and baseline logic there.
 
@@ -68,4 +68,4 @@ is set in `esp32_bluetooth.py`; both must match the firmware.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
