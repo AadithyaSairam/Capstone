@@ -9,7 +9,7 @@ setup(
     version="0.1",
     packages=find_packages(),
     install_requires=requirements,
-    author="Your Name",
-    description="A pressure visualization tool",
+    author="Aadithya Sairam",
+    description="Pressure sensing and visualisation for an adjustable paediatric prosthetic socket",
     python_requires=">=3.8",
 )
